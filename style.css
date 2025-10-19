@@ -1,20 +1,23 @@
-/* viewer-patch.css — styles layered on top of your existing table styles */
-.table-enhanced {
+/* viewer-patch.css (SCOPED) — only affects the Offline Editor inside #editorModal.
+   Fix: all selectors are prefixed with #editorModal to avoid leaking styles app-wide. */
+
+/* Enhanced table base */
+#editorModal .table-enhanced{
   table-layout: fixed;
   width: 100%;
   background: #0b142a;
   border-collapse: separate;
   border-spacing: 0;
 }
-.table-enhanced th,
-.table-enhanced td {
+#editorModal .table-enhanced th,
+#editorModal .table-enhanced td{
   border: 1px solid rgba(255,255,255,.12);
   vertical-align: top;
   padding: 0;
 }
 
 /* Sticky header row */
-.thead th {
+#editorModal .thead th{
   position: sticky;
   top: 0;
   background: #0e1a36;
@@ -24,19 +27,19 @@
 }
 
 /* Sticky first column */
-.sticky-col {
+#editorModal .sticky-col{
   position: sticky;
   left: 0;
   z-index: 2;
   background: #0e1a36;
 }
-tbody .sticky-col {
+#editorModal tbody .sticky-col{
   background: #0b142a;
   z-index: 1;
 }
 
 /* Comfortable textareas (~5 visible lines baseline) */
-.cell-textarea.comfy {
+#editorModal .cell-textarea.comfy{
   min-height: 6.5em;             /* ~5 lines */
   max-height: 60vh;
   resize: vertical;
@@ -52,7 +55,7 @@ tbody .sticky-col {
 }
 
 /* Checkbox presentation */
-.cell-checkbox {
+#editorModal .cell-checkbox{
   display: flex;
   align-items: center;
   justify-content: center;
@@ -60,10 +63,10 @@ tbody .sticky-col {
 }
 
 /* Readability */
-tbody tr.zebra { background: rgba(255,255,255,.03); }
+#editorModal tbody tr.zebra{ background: rgba(255,255,255,.03); }
 
 /* Ensure scroll container shows stickies correctly */
-.table-wrap {
+#editorModal .table-wrap{
   overflow: auto;
   max-height: calc(90vh - 200px);
   border: 1px solid rgba(255,255,255,.08);
@@ -71,8 +74,8 @@ tbody tr.zebra { background: rgba(255,255,255,.03); }
 }
 
 /* Focus ring for keyboard navigation */
-.cell:focus-within,
-.cell.selecting {
+#editorModal .cell:focus-within,
+#editorModal .cell.selecting{
   outline: 2px solid rgba(34,197,94,.6);
   outline-offset: -2px;
 }
