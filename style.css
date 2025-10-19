@@ -1,14 +1,14 @@
 
 /* GameSheets — style.css (Sticky Header Update) */
 :root{
-  --bg:#0f172a; --panel:#111827; --muted:#1f2937; --text:#e5e7eb; --sub:#9ca3af;
-  --brand:#22c55e; --brand-2:#16a34a; --danger:#ef4444; --warning:#f59e0b;
-  --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.35);
-  --cell-pad:10px; --cell-min-ch:8; --cell-max-ch:36; --line:1px solid rgba(255,255,255,.12);
+  --bg:#ffffff; --panel:#ffffff; --muted:#f6f7f9; --text:#111827; --sub:#6b7280;
+  --brand:#F4C6B0; --brand-2:#EBAA90; --danger:#ef4444; --warning:#f59e0b;
+  --radius:14px; --shadow:0 10px 30px rgba(0,0,0,.10);
+  --cell-pad:10px; --cell-min-ch:8; --cell-max-ch:36; --line:1px solid rgba(0,0,0,.10);
 }
 *{box-sizing:border-box}
 html,body{height:100%}
-body{margin:0; background:linear-gradient(180deg,var(--bg),#0b1227 45%, #0b1227);
+body{margin:0; background:linear-gradient(180deg,var(--bg),#f9f6f4 45%, #f9f6f4);
   color:var(--text); font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
   -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
   /* Reserve space for the vertical scrollbar so switching sheets doesn’t resize the page */
@@ -23,7 +23,7 @@ header{position:sticky; top:0; z-index:5; backdrop-filter:saturate(1.2) blur(8px
 .spacer{flex:1}
 .btn{appearance:none; border:0; background:var(--brand); color:#07120b; font-weight:700; padding:10px 14px; border-radius:10px; cursor:pointer; box-shadow:var(--shadow); transition:transform .05s ease, background .15s}
 .btn:hover{background:var(--brand-2)}
-.btn.secondary{background:#0b142a; color:var(--text); border:1px solid rgba(255,255,255,.08); box-shadow:none}
+.btn.secondary{background:#ffffff; color:var(--text); border:1px solid rgba(255,255,255,.08); box-shadow:none}
 .btn.danger{background:rgba(239,68,68,.12); color:#fecaca; border:1px solid rgba(239,68,68,.35)}
 .layout{display:grid; grid-template-columns:290px 1fr; gap:18px; padding:22px}
 .panel{background:rgba(255,255,255,.04); border:1px solid rgba(255,255,255,.08); border-radius:var(--radius); box-shadow:var(--shadow)}
@@ -36,7 +36,7 @@ aside{padding:16px}
 .game .meta{margin-left:auto; font-size:12px; color:var(--sub); background:rgba(255,255,255,.06); padding:3px 8px; border-radius:999px}
 .game-actions{display:flex; gap:8px; margin-top:10px}
 .field{display:flex; gap:8px}
-input[type="text"], .cell-input, .cell-textarea{flex:1; background:#0b142a; color:var(--text); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 12px}
+input[type="text"], .cell-input, .cell-textarea{flex:1; background:#ffffff; color:var(--text); border:1px solid rgba(255,255,255,.12); border-radius:10px; padding:10px 12px}
 main{padding:16px}
 .grid{display:grid; grid-template-columns:1fr; gap:16px}
 .card{padding:16px}
@@ -60,12 +60,12 @@ footer{padding:18px 22px; text-align:center; color:var(--sub)}
 
 /* -------- Offline Editor Table (with sticky header) -------- */
 .table-wrap{overflow:auto; border:1px solid rgba(255,255,255,.08); border-radius:12px}
-.table{border-collapse:separate; border-spacing:0; width:100%; background:#0b142a; table-layout:fixed}
+.table{border-collapse:separate; border-spacing:0; width:100%; background:#ffffff; table-layout:fixed}
 .table th,.table td{border:var(--line); padding:0; vertical-align:top}
 .thead th{
   position: sticky;
   top: 0;
-  background:#0e1a36;
+  background:#faf6f3;
   z-index:5;
   padding:8px 10px;
   text-align:left;
@@ -80,17 +80,17 @@ footer{padding:18px 22px; text-align:center; color:var(--sub)}
 /* -------- Modal (Exact Viewer + Editor) -------- */
 .modal{position:fixed; inset:0; display:none; place-items:center; background:rgba(0,0,0,.55); backdrop-filter:blur(3px); z-index:50}
 .modal.open{display:grid}
-.modal .box{width:min(1300px,96vw); height:min(95vh,1000px); background:#0b142a; border:1px solid rgba(255,255,255,.12); border-radius:14px; box-shadow:var(--shadow); display:flex; flex-direction:column}
+.modal .box{width:min(1300px,96vw); height:min(95vh,1000px); background:#ffffff; border:1px solid rgba(255,255,255,.12); border-radius:14px; box-shadow:var(--shadow); display:flex; flex-direction:column}
 .modal .head{display:flex; align-items:center; gap:10px; padding:12px 14px; border-bottom:1px solid rgba(255,255,255,.08)}
 .modal .head .title{font-weight:800}
 .modal .head .sub{color:var(--sub); font-size:12px}
-.modal .body{padding:6px 8px 8px; overflow:hidden; background:#061024; display:flex; gap:10px; flex-direction:column}
+.modal .body{padding:6px 8px 8px; overflow:hidden; background:#F4C6B0; display:flex; gap:10px; flex-direction:column}
 .sheet-tabs{
   display:flex;
   gap:8px;
   padding:10px;
   border-bottom:1px solid rgba(255,255,255,.08);
-  background:#0b142a;
+  background:#ffffff;
   /* Allow sheet names to stay within the modal and provide a horizontal scroll bar if needed. */
   overflow-x:auto;
   overflow-y:hidden;
@@ -107,7 +107,7 @@ footer{padding:18px 22px; text-align:center; color:var(--sub)}
 .sheet-tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2); border-radius:3px}
 .sheet-tabs::-webkit-scrollbar-track{background:transparent}
 .sheet-tabs button{
-  background:#0e1a36;
+  background:#faf6f3;
   color:var(--text);
   border:1px solid rgba(255,255,255,.12);
   border-radius:8px;
@@ -130,8 +130,8 @@ footer{padding:18px 22px; text-align:center; color:var(--sub)}
 }
 
 /* -------- Exact Viewer (iframe fill parent) -------- */
-.iframe-wrap{flex:1; border:1px solid rgba(255,255,255,.09); border-radius:12px; overflow:hidden; background:#0b142a; display:flex; min-height:60vh}
-.iframe-wrap iframe{width:100%; height:100%; border:0; background:#0b142a; display:block}
+.iframe-wrap{flex:1; border:1px solid rgba(255,255,255,.09); border-radius:12px; overflow:hidden; background:#ffffff; display:flex; min-height:60vh}
+.iframe-wrap iframe{width:100%; height:100%; border:0; background:#ffffff; display:block}
 
 @media (min-height: 700px){
   .modal .box{height:min(96vh,1100px)}
@@ -141,4 +141,92 @@ footer{padding:18px 22px; text-align:center; color:var(--sub)}
   .layout{grid-template-columns:1fr}
   aside{order:2}
   main{order:1}
+}
+
+
+
+/* === Peach Everywhere — color-only overrides (no layout changes) === */
+
+/* Page background: soft peach ambient */
+body{
+  background:
+    radial-gradient(1000px 700px at 15% 10%, rgba(244,198,176,.24), rgba(244,198,176,0) 60%),
+    radial-gradient(900px 600px at 85% 20%, rgba(235,170,144,.18), rgba(235,170,144,0) 65%),
+    linear-gradient(180deg, #ffffff, #fbfaf9 60%, #f7f6f5 100%) !important;
+  color: var(--text);
+}
+
+/* Header: glassy white with peach brand text only */
+header{
+  background:linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.70)) !important;
+  border-bottom:1px solid rgba(0,0,0,.06) !important;
+  backdrop-filter:saturate(115%) blur(8px);
+}
+.logo b{
+  background:linear-gradient(90deg,var(--brand),var(--brand-2));
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+}
+
+/* Sidebar & cards: white panels */
+.panel.card{ background:#ffffff !important; border:1px solid rgba(0,0,0,.08) !important; box-shadow: var(--shadow) !important; }
+
+/* Tabs */
+.tab{ background:#fff !important; color:#111827 !important; border:1px solid rgba(0,0,0,.12) !important; }
+.tab.active{
+  background:linear-gradient(180deg, rgba(244,198,176,.40), rgba(235,170,144,.22)) !important;
+  border-color:rgba(235,170,144,.55) !important;
+  color:#111827 !important;
+}
+
+/* Buttons */
+button, .btn, input[type=button], input[type=submit], input[type=reset]{
+  background:linear-gradient(180deg, var(--brand), var(--brand-2)) !important;
+  color:#30180f !important;
+  border:1px solid rgba(0,0,0,.10) !important;
+}
+.btn.secondary{ background:#fff !important; color:#111827 !important; border:1px solid rgba(0,0,0,.12) !important; box-shadow:none !important; }
+
+/* Inputs */
+input[type=text], input[type=number], input[type=url], input[type=file], input[type=email], input[type=search],
+input[type=password], select, textarea{
+  background:#fff !important; border:1px solid rgba(0,0,0,.12) !important; color:#111827 !important;
+}
+input:focus, select:focus, textarea:focus, button:focus, .btn:focus{
+  outline:none !important; box-shadow:0 0 0 3px rgba(244,198,176,.45) !important; border-color:rgba(235,170,144,.75) !important;
+}
+input[type=checkbox], input[type=radio]{ accent-color: var(--brand-2); }
+input[type=file]::file-selector-button{
+  background:linear-gradient(180deg, var(--brand), var(--brand-2)) !important; color:#30180f !important;
+  border:1px solid rgba(0,0,0,.10) !important; border-radius:10px !important; padding:8px 12px !important; margin-right:10px !important;
+}
+
+/* Offline Spreadsheet Viewer — remove all dark blues */
+.table-wrap{ background:#ffffff !important; border:1px solid rgba(0,0,0,.10) !important; }
+.table{ background:#ffffff !important; }
+.table th, .table td{ background:#ffffff !important; border:1px solid rgba(0,0,0,.08) !important; }
+.thead th{ background:#fafafa !important; color:#0f172a !important; border-bottom:1px solid rgba(0,0,0,.10) !important; }
+.table tbody tr:hover td{ background:rgba(244,198,176,.10) !important; }
+.table tbody tr.section-header td{ background:#f8fafc !important; color:#0f172a !important; }
+.progress{ background:rgba(15,23,42,.08) !important; } /* neutral, not blue */
+.progress > span{ background:linear-gradient(90deg, var(--brand), var(--brand-2)) !important; }
+
+/* Editor modal canvas — peach */
+#editorModal, dialog#editorModal, #editorModal .modal-body{
+  background: linear-gradient(180deg, #FDE6DC, #FAD9CB) !important;
+}
+
+/* Exact viewer modal too (chrome only for shell; iframe contents remain native) */
+#exactModal, dialog#exactModal, #exactModal .modal-body{
+  background: linear-gradient(180deg, #FDE6DC, #FAD9CB) !important;
+}
+
+/* Scrollbars: neutral gray */
+::-webkit-scrollbar-thumb{ background:rgba(15,23,42,.18) !important; }
+::-webkit-scrollbar-thumb:hover{ background:rgba(15,23,42,.26) !important; }
+
+
+
+/* === FINAL OVERRIDE: Editor modal body solid peach (Option A) === */
+#editorModal .modal-body{
+  background:#FBECE4 !important;  /* soft solid peach */
 }
