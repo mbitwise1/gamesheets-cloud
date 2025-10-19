@@ -10,10 +10,7 @@
 html,body{height:100%}
 body{margin:0; background:linear-gradient(180deg,var(--bg),#0b1227 45%, #0b1227);
   color:var(--text); font-family:Inter,system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;
-  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;
-  /* Reserve space for the vertical scrollbar so switching sheets doesn’t resize the page */
-  overflow-y: scroll;
-}
+  -webkit-font-smoothing:antialiased; -moz-osx-font-smoothing:grayscale;}
 header{position:sticky; top:0; z-index:5; backdrop-filter:saturate(1.2) blur(8px);
   background:rgba(5,10,24,.65); border-bottom:1px solid rgba(255,255,255,.06);}  
 .wrap{max-width:1200px; margin:0 auto; padding:16px 20px}
@@ -85,49 +82,11 @@ footer{padding:18px 22px; text-align:center; color:var(--sub)}
 .modal .head .title{font-weight:800}
 .modal .head .sub{color:var(--sub); font-size:12px}
 .modal .body{padding:6px 8px 8px; overflow:hidden; background:#061024; display:flex; gap:10px; flex-direction:column}
-.sheet-tabs{
-  display:flex;
-  gap:8px;
-  padding:10px;
-  border-bottom:1px solid rgba(255,255,255,.08);
-  background:#0b142a;
-  /* Allow sheet names to stay within the modal and provide a horizontal scroll bar if needed. */
-  overflow-x:auto;
-  overflow-y:hidden;
-  max-width:100%;
-  /* Keep the height of the tab bar constant regardless of scrollbars or active sheets.  
-     Set a minimum height equal to the tallest button (including its padding) plus the bar’s own padding. */
-  min-height: 48px;
-  /* Vertically center the buttons in the bar. */
-  align-items:center;
-}
-
-/* style the horizontal scrollbar on the sheet-tabs container */
-.sheet-tabs::-webkit-scrollbar{height:6px}
-.sheet-tabs::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.2); border-radius:3px}
-.sheet-tabs::-webkit-scrollbar-track{background:transparent}
-.sheet-tabs button{
-  background:#0e1a36;
-  color:var(--text);
-  border:1px solid rgba(255,255,255,.12);
-  border-radius:8px;
-  padding:6px 10px;
-  cursor:pointer;
-  /* Do not allow the tab buttons to shrink when the modal width changes. Each tab grows based on its content and can overflow horizontally. */
-  flex: 0 0 auto;
-  white-space: nowrap;
-}
+.sheet-tabs{display:flex; gap:8px; padding:10px; border-bottom:1px solid rgba(255,255,255,.08); background:#0b142a}
+.sheet-tabs button{background:#0e1a36; color:var(--text); border:1px solid rgba(255,255,255,.12); border-radius:8px; padding:6px 10px; cursor:pointer}
 .sheet-tabs button.active{background:rgba(34,197,94,.15); border-color:rgba(34,197,94,.45)}
 .editor-toolbar{display:flex; gap:8px; align-items:center}
 .editor-toolbar .btn{padding:8px 10px; border-radius:8px}
-
-/* Section header rows: bold text and subtle background to differentiate from editable cells */
-.cell.section-header{
-  font-weight:bold;
-  background:rgba(255,255,255,0.04);
-  color:var(--text);
-  padding:var(--cell-pad);
-}
 
 /* -------- Exact Viewer (iframe fill parent) -------- */
 .iframe-wrap{flex:1; border:1px solid rgba(255,255,255,.09); border-radius:12px; overflow:hidden; background:#0b142a; display:flex; min-height:60vh}

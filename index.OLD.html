@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="app-version" content="3.0-split" />
+  <title>Game Sheets — Personal Tracker</title>
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+</head>
+<body>
+  <header>
+    <div class="wrap bar">
+      <div class="logo">Game<b>Sheets</b></div>
+      <div class="spacer"></div>
+      <button id="exportBtn" class="btn secondary" title="Export all data (games + spreadsheets)">Export</button>
+      <button id="importBtn" class="btn secondary" title="Import a backup JSON">Import</button>
+      <input id="importFile" type="file" accept="application/json" class="hidden" />
+      <button id="downloadHtmlBtn" class="btn" title="Download this app as a single HTML file">Download Page</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="panel">
+      <div class="section-title">Your games</div>
+      <div class="game-actions field">
+        <input id="newGameName" type="text" placeholder="Add a game (e.g., Starfield)" />
+        <button id="addGameBtn" class="btn">Add</button>
+      </div>
+      <div id="games" class="game-list" aria-live="polite"></div>
+      <div class="hint" style="margin-top:8px">HIII ROEEEEEEEE.</div>
+    </aside>
+
+    <main>
+      <div class="grid">
+        <section class="panel card" id="gamePanel">
+          <div class="row">
+            <h2 id="gameTitle" style="margin:0">No game selected</h2>
+            <span id="fileCount" class="pill">0 files</span>
+            <span class="spacer"></span>
+            <button id="renameGameBtn" class="btn secondary" disabled>Rename</button>
+            <button id="deleteGameBtn" class="btn secondary danger" disabled>Delete</button>
+          </div>
+          <p class="muted" id="gameHelp">Select or create a game on the left to begin.</p>
+        </section>
+
+        <section class="panel card" id="uploadPanel" aria-disabled="true">
+          <div class="row">
+            <h3 style="margin:0">Spreadsheets</h3>
+            <span class="spacer"></span>
+            <div class="toolbar search">
+              <input id="search" type="text" placeholder="Filter by file name…" />
+            </div>
+            <input id="fileInput" type="file" multiple
+                   accept=".csv, application/vnd.ms-excel, application/vnd.openxmlformats-officedocument.spreadsheetml.sheet, application/vnd.oasis.opendocument.spreadsheet"
+                   class="hidden" />
+            <button id="uploadBtn" class="btn" disabled>Upload files</button>
+          </div>
+          <p class="hint">Accepted: CSV, XLS, XLSX, ODS. Stored locally (IndexedDB). Use <b>Open</b> to edit offline, or link an online URL for a pixel-perfect <b>Exact View</b>.</p>
+          <table class="files" id="fileTable">
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Added</th>
+                <th>Exact URL</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="fileBody">
+              <tr><td colspan="6" class="muted">No files yet.</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <section class="panel card" id="linksPanel" aria-disabled="true">
+          <div class="row">
+            <h3 style="margin:0">Online Sheets (Exact View)</h3>
+            <span class="spacer"></span>
+            <input id="newLinkName" type="text" placeholder="Name (e.g., Items master)" style="min-width:200px" />
+            <input id="newLinkUrl" type="text" placeholder="Paste Google Sheets / OneDrive Excel share link" style="min-width:340px" />
+            <button id="addLinkBtn" class="btn" disabled>Add Link</button>
+          </div>
+          <p class="hint">For Google Sheets: <b>File → Share → Publish to web</b> or set to <i>Anyone with the link</i>, then paste the link. For OneDrive Excel: use the generated <b>Embed</b> link (or paste a view link; we’ll convert it).</p>
+          <table class="files" id="linksTable">
+            <thead>
+              <tr><th>Name</th><th>Host</th><th>URL</th><th></th></tr>
+            </thead>
+            <tbody id="linksBody"><tr><td colspan="4" class="muted">No links yet.</td></tr></tbody>
+          </table>
+        </section>
+      </div>
+    </main>
+  </div>
+
+  <!-- Offline Editor Modal (kept) -->
+  <div id="editorModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="box">
+      <div class="head">
+        <div>
+          <div class="title" id="editorTitle">Editor</div>
+          <div class="sub" id="editorMeta"></div>
+        </div>
+        <span class="spacer"></span>
+        <div class="editor-toolbar">
+          <label class="pill" style="padding:6px 10px; display:flex; align-items:center; gap:6px">
+            <input id="smartControls" type="checkbox" checked /> Smart controls
+          </label>
+          <button id="addRowBtn" class="btn secondary" title="Append a new row">+ Row</button>
+          <button id="saveBtn" class="btn" title="Write changes back to this file">Save</button>
+          <button id="exportCsvBtn" class="btn secondary" title="Export current sheet to CSV">Export CSV</button>
+          <button id="exportXlsxBtn" class="btn secondary" title="Export workbook to XLSX">Export XLSX</button>
+          <button id="closeEditor" class="btn secondary">Close</button>
+        </div>
+      </div>
+      <div class="sheet-tabs" id="sheetTabs" aria-label="Sheets"></div>
+      <div class="body">
+        <div class="table-wrap" id="editorBody"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Exact Viewer Modal (iframe embed from URL only in this build) -->
+  <div id="exactModal" class="modal" role="dialog" aria-modal="true" aria-hidden="true">
+    <div class="box">
+      <div class="head">
+        <div>
+          <div class="title" id="exactTitle">Exact Viewer</div>
+          <div class="sub" id="exactMeta">Pixel-perfect via Google Sheets / OneDrive. May require public or anyone-with-link access.</div>
+        </div>
+        <span class="spacer"></span>
+        <div class="editor-toolbar">
+          <button id="openInNewTabBtn" class="btn secondary">Open in new tab</button>
+          <button id="closeExact" class="btn secondary">Close</button>
+        </div>
+      </div>
+      <div class="body">
+        <div class="warn" id="exactWarn"></div>
+        <div class="iframe-wrap"><iframe id="exactFrame" referrerpolicy="no-referrer"></iframe></div>
+      </div>
+    </div>
+  </div>
+
+  <footer class="small">
+    <div>Local files stay in your browser. Exact Viewer needs a web link. Use <b>Export</b> for full backups.</div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>

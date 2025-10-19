@@ -410,8 +410,6 @@ function openEditor(rec){
         currentAdapt = extractAdapt(ws);
         renderSheetTabs([currentSheetName]);
         renderMatrix(currentMatrix, currentAdapt);
-        // After rendering the sheet, compute and display progress for the first (and only) sheet
-        updateCurrentSheetProgress();
         openModal(els.editorModal,true);
         return;
       }
@@ -421,11 +419,9 @@ function openEditor(rec){
       currentSheetName=names[0];
       currentWS = currentWB.Sheets[currentSheetName];
       currentAdapt = extractAdapt(currentWS);
-      currentMatrix = XLSX.utils.sheet_to_json(currentWS, { header:1, blankrows:true, defval:'', raw:true });
+      currentMatrix = XLSX.utils.sheet_to_json(currentWS, { header:1, blankrows:true, defval:'' });
       renderSheetTabs(names);
       renderMatrix(currentMatrix, currentAdapt);
-      // After rendering the sheet, compute and display progress for the first sheet
-      updateCurrentSheetProgress();
       openModal(els.editorModal,true);
     }catch(err){
       alert('Open failed. You can still download the file.\n'+err.message);
@@ -437,40 +433,15 @@ function renderSheetTabs(names){
   if(!els.sheetTabs) return;
   els.sheetTabs.replaceChildren();
   names.forEach(function(name){
-    // Compute progress for this sheet. We attempt to derive the matrix
-    // directly from the workbook without altering current state.
-    var pct = 0;
-    try{
-      if(currentWB && currentWB.Sheets && currentWB.Sheets[name]){
-        var ws = currentWB.Sheets[name];
-        var matrix = XLSX.utils.sheet_to_json(ws, { header:1, blankrows:true, defval:'', raw:true });
-        var prog = computeProgress(matrix);
-        if(prog.total > 0){
-          pct = Math.round((prog.completed / prog.total) * 100);
-        }
-      }
-    }catch(e){ pct = 0; }
-    var b=document.createElement('button');
-    b.dataset.sheetName = name;
-    b.textContent = name + ' (' + pct + '%)';
+    var b=document.createElement('button'); b.textContent=name;
     if(name===currentSheetName) b.classList.add('active');
     b.addEventListener('click', function(){
-      // Before switching sheets, persist any changes made to the current sheet
-      // into the workbook so they are retained when coming back. This ensures
-      // checkbox states and other edits are not lost when navigating tabs.
-      if(currentWB && currentMatrix && currentSheetName){
-        try{
-          syncMatrixIntoWorkbook();
-        }catch(e){ /* ignore errors */ }
-      }
-      currentSheetName = name;
+      currentSheetName=name;
       currentWS = currentWB.Sheets[name];
       currentAdapt = extractAdapt(currentWS);
-      currentMatrix = XLSX.utils.sheet_to_json(currentWS, { header:1, blankrows:true, defval:'', raw:true });
+      currentMatrix = XLSX.utils.sheet_to_json(currentWS, { header:1, blankrows:true, defval:'' });
       renderSheetTabs(names);
       renderMatrix(currentMatrix, currentAdapt);
-      // Update progress meta for newly selected sheet
-      updateCurrentSheetProgress();
     });
     els.sheetTabs.appendChild(b);
   });
@@ -488,113 +459,16 @@ function matrixToCSV(matrix){
 }
 function stripQuotes(s){ if(s==null) return ''; s=String(s); if(s.startsWith('"') && s.endsWith('"')) return s.slice(1,-1).replace(/""/g,'"'); return s; }
 function headerRow(matrix){ return matrix.length? matrix[0] : []; }
-
-/**
- * Compute progress for a sheet matrix. Progress is defined as the number of
- * boolean-like cells that are checked (true) divided by the total number of
- * boolean-like cells. Cells in the header row (row 0) are ignored. The
- * returned object contains the completed and total counts. You can derive
- * the percentage by dividing completed by total and multiplying by 100.
- *
- * @param {Array<Array<any>>} matrix The sheet data as a 2D array.
- * @returns {{completed:number,total:number}}
- */
-function computeProgress(matrix){
-  var completed = 0;
-  var total = 0;
-  if(!Array.isArray(matrix)) return { completed: 0, total: 0 };
-  for(var r = 1; r < matrix.length; r++){
-    var row = matrix[r];
-    if(!row) continue;
-    for(var c = 0; c < row.length; c++){
-      var val = row[c];
-      if(isBooleanLike(val)){
-        total++;
-        if(normalizeBool(val)) completed++;
-      }
-    }
-  }
-  return { completed: completed, total: total };
-}
-
-/**
- * Update the progress percentage for the currently active sheet. This will
- * recompute progress based on the currentMatrix, update the sheet tab
- * label to include the percentage, and update the editor metadata to
- * include the progress next to the file type and size. This function
- * should be called whenever a checkbox is toggled or when a sheet is
- * rendered.
- */
-function updateCurrentSheetProgress(){
-  if(!currentMatrix || !els.sheetTabs) return;
-  var prog = computeProgress(currentMatrix);
-  var pct = 0;
-  if(prog.total > 0){
-    pct = Math.round((prog.completed / prog.total) * 100);
-  }
-  // Update tab label for current sheet
-  var buttons = els.sheetTabs.querySelectorAll('button');
-  buttons.forEach(function(b){
-    var name = b.dataset.sheetName || '';
-    if(!name){
-      // Attempt to derive name from text content before parentheses
-      var idx = b.textContent.indexOf(' (');
-      if(idx >= 0) name = b.textContent.slice(0, idx);
-      else name = b.textContent;
-    }
-    if(name === currentSheetName){
-      b.textContent = name + ' (' + pct + '%)';
-    }
-  });
-  // Update editor meta line with progress (type • size • progress%) if editorMeta exists
-  if(currentFileRec && els.editorMeta){
-    var text = '';
-    if(currentFileRec.type){ text += currentFileRec.type; }
-    if(currentFileRec.size != null){
-      if(text) text += ' • ';
-      text += humanSize(currentFileRec.size);
-    }
-    // Append progress if there are boolean-like values
-    if(prog.total > 0){
-      if(text) text += ' • ';
-      text += pct + '% complete';
-    }
-    els.editorMeta.textContent = text;
-  }
-}
-/**
- * Analyze a column to determine its unique values, how many non-empty values there are,
- * and how many of those values look like booleans.
- * This is used to improve the heuristics for selecting input types. By also
- * returning the total number of non-empty values, callers can decide if a
- * column has enough duplication to warrant a dropdown.
- */
-function analyzeColumn(matrix, col){
-  var seen = {};
-  var uniques = [];
-  var total = 0;
-  var boolCount = 0;
-  for(var r=1; r < matrix.length; r++){
-    var row = matrix[r];
-    var v = (row && row[col] !== undefined) ? row[col] : undefined;
-    if(v !== '' && v != null){
-      total++;
-      if(isBooleanLike(v)) boolCount++;
-      var key = String(v);
-      if(!seen[key]){
-        seen[key] = 1;
-        uniques.push(key);
-        // We only care about up to 12 unique values for performance reasons
-        if(uniques.length > 12) break;
-      }
-    }
-  }
-  return { uniques: uniques, total: total, boolCount: boolCount };
-}
-
-// Backwards compatibility: retain uniqueValuesByCol for any existing usages.
 function uniqueValuesByCol(matrix, col){
-  return analyzeColumn(matrix, col).uniques;
+  var set={}; var arr=[];
+  for(var r=1;r<matrix.length;r++){
+    var v = (matrix[r] && matrix[r][col]!==undefined) ? matrix[r][col] : undefined;
+    if(v!=='' && v!=null){
+      var key=String(v);
+      if(!set[key]){ set[key]=1; arr.push(key); if(arr.length>12) break; }
+    }
+  }
+  return arr;
 }
 function isBooleanLike(v){
   if(typeof v==='boolean') return true;
@@ -604,118 +478,6 @@ function isBooleanLike(v){
 function normalizeBool(v){
   var s=String(v).trim().toLowerCase();
   return (s==='true'||s==='yes'||s==='y'||s==='1'||s==='☑');
-}
-
-/**
- * Determine whether a given row should be treated as a section header rather than
- * editable data. A section header row typically contains only a handful of
- * non-empty values (excluding boolean-like values) relative to the total
- * number of columns, or represents a merged title across multiple columns.
- *
- * The heuristics used here consider a row to be a section header when:
- *  - There are no boolean-like values in the row.
- *  - The number of non-empty, non-boolean values is less than or equal to 2,
- *    OR those values occupy less than 20% of the total columns.
- *  - Additionally, if there is a merge spanning more than one column starting
- *    on this row, it is also treated as a section header.
- *
- * These rules are imperfect but provide reasonable defaults for many
- * spreadsheets that organize data into sections with titles. Users can
- * override this behaviour by disabling smart controls.
- *
- * @param {Array<Array<any>>} matrix The sheet data as a 2D array.
- * @param {number} r The row index to test.
- * @param {Object} adapt The adapt object containing merge information.
- * @returns {boolean} True if the row is considered a section header.
- */
-function isSectionHeaderRow(matrix, r, adapt, colStats){
-  if(!matrix || r <= 0) return false; // never treat header row (r==0) as section
-  var row = matrix[r] || [];
-  var nonEmptyCount = 0;
-  var boolCount = 0;
-  var totalCols = 0;
-  // Track positions of non-boolean, non-empty values
-  var positions = [];
-  // Flag indicating if the row contains colon-ending labels (e.g., "Player Name:") which are
-  // typically form fields rather than section headers. If any cell ends with a colon,
-  // the row is not considered a header.
-  var hasColonLabel = false;
-  // Track value counts for duplicate detection. We only count string values
-  // (excluding booleans) because duplicates of strings like "Name" or "Location"
-  // often indicate a header row repeated across groups. If a value appears
-  // multiple times within the same row, we treat that row as a header.
-  var valueCounts = {};
-  var hasDuplicateStrings = false;
-  for(var i = 0; i < row.length; i++){
-    var v = row[i];
-    if(v !== '' && v != null){
-      totalCols = Math.max(totalCols, i+1);
-      if(isBooleanLike(v)){
-        boolCount++;
-      } else {
-        nonEmptyCount++;
-        positions.push(i);
-        // Check for colon-ending labels
-        if(typeof v === 'string' && v.trim().endsWith(':')){
-          hasColonLabel = true;
-        }
-        // Count duplicate string values to detect repeated headers (e.g., Name, Location)
-        if(typeof v === 'string'){
-          var key = v.trim();
-          if(key){
-            if(valueCounts[key]){
-              hasDuplicateStrings = true;
-            } else {
-              valueCounts[key] = 1;
-            }
-          }
-        }
-      }
-    }
-  }
-  // Do not treat rows containing booleans as section headers
-  if(boolCount > 0) return false;
-  // Rows with colon labels are likely data-entry prompts rather than headers
-  if(hasColonLabel) return false;
-  // Determine ratio of non-empty, non-boolean values to total columns
-  var ratio = totalCols > 0 ? (nonEmptyCount / totalCols) : 0;
-  // Check for merges on this row
-  var isMerged = false;
-  if(adapt && adapt.merges){
-    for(var mIdx = 0; mIdx < adapt.merges.length; mIdx++){
-      var m = adapt.merges[mIdx];
-      if(m.s.r === r && (m.e.c - m.s.c) >= 1){
-        isMerged = true;
-        break;
-      }
-    }
-  }
-  // Column-level check: treat as header only if all columns containing non-boolean values
-  // have very few total entries (<=2) across the entire sheet. This helps avoid
-  // misclassifying data rows with sparse entries in wide tables.
-  var colCondition = true;
-  if(colStats){
-    for(var idx = 0; idx < positions.length; idx++){
-      var c = positions[idx];
-      var stat = colStats[c];
-      if(stat && stat.total > 2){
-        colCondition = false;
-        break;
-      }
-    }
-  }
-  // Final decision: a row is a section header if one of these conditions holds:
-  // 1. The row has duplicate string values (e.g., repeating "Name" or "Location"), indicating
-  //    a repeated header across grouped columns.
-  // 2. The row has few non-empty values (<=2) or a low ratio (<=0.3) or is merged,
-  //    AND passes the column-level condition. We slightly relax the ratio threshold
-  //    compared to the original (0.2 -> 0.3) to catch column header rows with three
-  //    repeated labels.
-  var rowCondition = (nonEmptyCount <= 2 || ratio <= 0.3);
-  if(hasDuplicateStrings){
-    return true;
-  }
-  return ( (rowCondition || isMerged) && colCondition );
 }
 
 function autosizeColumns(matrix){
@@ -778,26 +540,10 @@ function renderMatrix(matrix, adapt){
   thead.appendChild(trh);
 
   var tbody=document.createElement('tbody');
-
-  // Determine whether smart controls are enabled once per render.
-  var useSmart = (els.smartControls ? !!els.smartControls.checked : true);
-  // Precompute statistics for each column to improve input-type heuristics. Use a
-  // separate variable (colCount) to avoid shadowing the `cols` variable defined later.
-  var colStats = [];
-  var colCount = Math.max.apply(Math, matrix.map(function(r){ return r.length; }).concat([1]));
-  if(useSmart){
-    for(var cIdx = 0; cIdx < colCount; cIdx++){
-      colStats[cIdx] = analyzeColumn(matrix, cIdx);
-    }
-  }
   for(var r=1;r<matrix.length;r++){
     var tr=document.createElement('tr');
     var rh = adapt && adapt.rowPx ? adapt.rowPx[r] : null;
     if(typeof rh === 'number') tr.style.height = rh + 'px';
-
-    // Determine if this row is a section header. When smart controls are enabled,
-    // section headers will be displayed as plain text without inputs.
-    var isSection = useSmart && isSectionHeaderRow(matrix, r, adapt, colStats);
 
     for(var c2=0;c2<cols;c2++){
       var m = isMergedCovered(adapt, r, c2);
@@ -807,101 +553,34 @@ function renderMatrix(matrix, adapt){
         if(m.span.cols>1) td.colSpan = m.span.cols;
         if(m.span.rows>1) td.rowSpan = m.span.rows;
       }
-      if(isSection){
-        // For section header rows, simply display the value as text (non-editable).
-        // Apply a special class to highlight section headers.
-        td.className = 'cell section-header';
-        var vSec = (matrix[r] && matrix[r][c2] !== undefined) ? matrix[r][c2] : '';
-        td.textContent = String(vSec);
+      var v = (matrix[r] && matrix[r][c2]!==undefined) ? matrix[r][c2] : '';
+      var vStr = String(v); var isNum = (vStr!=='' && !isNaN(Number(vStr)));
+      var useSmart = (els.smartControls ? !!els.smartControls.checked : true);
+      var uniques = useSmart ? uniqueValuesByCol(matrix,c2) : [];
+
+      if(useSmart && isBooleanLike(v) && uniques.length<=2){
+        var wrap=document.createElement('div'); wrap.className='cell-checkbox';
+        var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=normalizeBool(v);
+        cb.addEventListener('change', (function(r,c2,cb){ return function(){ matrix[r][c2] = cb.checked? 'TRUE':'FALSE'; };})(r,c2,cb));
+        wrap.appendChild(cb); td.appendChild(wrap);
+      } else if(useSmart && uniques.length>0 && uniques.length<=10){
+        var sel=document.createElement('select'); sel.className='cell-select';
+        var emptyOpt=document.createElement('option'); emptyOpt.value=''; emptyOpt.textContent=''; sel.appendChild(emptyOpt);
+        uniques.forEach(function(u){ var o=document.createElement('option'); o.value=u; o.textContent=u; sel.appendChild(o); });
+        sel.value=vStr;
+        sel.addEventListener('change', (function(r,c2,sel){ return function(){ matrix[r][c2] = sel.value; };})(r,c2,sel));
+        td.appendChild(sel);
       } else {
-        var v = (matrix[r] && matrix[r][c2] !== undefined) ? matrix[r][c2] : '';
-        var vStr = String(v);
-        var isNum = (vStr !== '' && !isNaN(Number(vStr)));
-        var stats = colStats[c2] || { uniques: [], total: 0, boolCount: 0 };
-        // Determine the appropriate control based on the column statistics.
-        // Determine whether this particular cell should be treated as a boolean.
-        var cellIsBool = false;
-        if(useSmart){
-          // Treat values as boolean-like if they are booleans, numeric 0/1, or strings such as "true", "false", "yes", "no", etc.
-          if(isBooleanLike(v)) cellIsBool = true;
-        }
-        // A column is considered boolean if it has at most two unique non-empty values and all of them are boolean-like.
-        var allBooleanUnique = false;
-        if(useSmart && stats.uniques && stats.uniques.length > 0 && stats.uniques.length <= 2){
-          allBooleanUnique = stats.uniques.every(function(u){ return isBooleanLike(u); });
-        }
-        if(cellIsBool || (useSmart && allBooleanUnique)){
-          // Render a checkbox for boolean cells or for columns with exclusively boolean-like values.
-          var wrap=document.createElement('div'); wrap.className='cell-checkbox';
-          var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=normalizeBool(v);
-          cb.addEventListener('change', (function(r,c2,cb){
-            return function(){
-              // Store boolean true/false instead of strings to preserve type information
-              matrix[r][c2] = !!cb.checked;
-              // Recompute and update progress whenever a checkbox is toggled
-              updateCurrentSheetProgress();
-              // Persist changes immediately to the workbook so edits are not lost
-              // when switching sheets.  This ensures that toggling a checkbox
-              // writes the updated matrix back to the current workbook sheet.
-              try{
-                if(currentWB && currentMatrix && currentSheetName){
-                  syncMatrixIntoWorkbook();
-                }
-              }catch(e){ /* ignore errors */ }
-            };
-          })(r,c2,cb));
-          wrap.appendChild(cb); td.appendChild(wrap);
-        } else if(useSmart && stats.uniques && stats.uniques.length > 0 && stats.uniques.length <= 10 && stats.uniques.length < stats.total && !allBooleanUnique && stats.boolCount === 0){
-          // Column has a manageable number of unique values and enough duplicates to justify a dropdown.
-          var sel=document.createElement('select'); sel.className='cell-select';
-          var emptyOpt=document.createElement('option'); emptyOpt.value=''; emptyOpt.textContent=''; sel.appendChild(emptyOpt);
-          stats.uniques.forEach(function(u){ var o=document.createElement('option'); o.value=u; o.textContent=u; sel.appendChild(o); });
-          sel.value=vStr;
-          sel.addEventListener('change', (function(r,c2,sel){ return function(){
-            // Update matrix with selected value
-            matrix[r][c2] = sel.value;
-            // Update progress (in case boolean-like values are affected)
-            updateCurrentSheetProgress();
-            // Persist changes immediately so that switching tabs retains edits
-            try{
-              if(currentWB && currentMatrix && currentSheetName){
-                syncMatrixIntoWorkbook();
-              }
-            }catch(e){ /* ignore errors */ }
-          };})(r,c2,sel));
-          td.appendChild(sel);
+        if(vStr.indexOf('\n')>-1 || vStr.length>30){
+          var ta=document.createElement('textarea'); ta.className='cell-textarea'; ta.value=vStr; ta.rows=5; autoResizeTA(ta);
+          ta.style.textAlign = isNum ? 'right' : 'left';
+          ta.addEventListener('input', (function(r,c2,ta){ return function(){ autoResizeTA(ta); matrix[r][c2]=ta.value; };})(r,c2,ta));
+          td.appendChild(ta);
         } else {
-          // Use textarea for long or multi-line content, otherwise a simple input (text or number).
-          if(vStr.indexOf('\n') > -1 || vStr.length > 30){
-            var ta=document.createElement('textarea'); ta.className='cell-textarea'; ta.value=vStr; ta.rows=5; autoResizeTA(ta);
-            ta.style.textAlign = isNum ? 'right' : 'left';
-            ta.addEventListener('input', (function(r,c2,ta){ return function(){
-              autoResizeTA(ta);
-              matrix[r][c2] = ta.value;
-              // Update progress and persist changes when editing a textarea
-              updateCurrentSheetProgress();
-              try{
-                if(currentWB && currentMatrix && currentSheetName){
-                  syncMatrixIntoWorkbook();
-                }
-              }catch(e){ /* ignore errors */ }
-            };})(r,c2,ta));
-            td.appendChild(ta);
-          } else {
-            var inp=document.createElement('input'); inp.className='cell-input'; inp.type = isNum ? 'number' : 'text'; inp.value = vStr;
-            inp.style.textAlign = isNum ? 'right' : 'left';
-            inp.addEventListener('change', (function(r,c2,inp){ return function(){
-              matrix[r][c2] = (inp.type === 'number' && inp.value !== '') ? Number(inp.value) : inp.value;
-              // Update progress and persist changes for input fields
-              updateCurrentSheetProgress();
-              try{
-                if(currentWB && currentMatrix && currentSheetName){
-                  syncMatrixIntoWorkbook();
-                }
-              }catch(e){ /* ignore errors */ }
-            };})(r,c2,inp));
-            td.appendChild(inp);
-          }
+          var inp=document.createElement('input'); inp.className='cell-input'; inp.type=isNum? 'number':'text'; inp.value=vStr;
+          inp.style.textAlign = isNum ? 'right' : 'left';
+          inp.addEventListener('change', (function(r,c2,inp){ return function(){ matrix[r][c2]= (inp.type==='number' && inp.value!=='') ? Number(inp.value) : inp.value; };})(r,c2,inp));
+          td.appendChild(inp);
         }
       }
       tr.appendChild(td);
@@ -914,17 +593,7 @@ function renderMatrix(matrix, adapt){
     var cols0=Math.max(1, headerRow(matrix).length);
     for(var c3=0;c3<cols0;c3++){
       var td0=document.createElement('td'); var ta0=document.createElement('textarea'); ta0.className='cell-textarea'; ta0.rows=5; ta0.value='';
-      (function(c3,ta0){ ta0.addEventListener('input', function(){
-        if(!matrix[1]) matrix[1]=[];
-        matrix[1][c3] = ta0.value;
-        // Update progress and persist changes when editing the first data row
-        updateCurrentSheetProgress();
-        try{
-          if(currentWB && currentMatrix && currentSheetName){
-            syncMatrixIntoWorkbook();
-          }
-        }catch(e){ /* ignore errors */ }
-      }); })(c3,ta0);
+      (function(c3,ta0){ ta0.addEventListener('input', function(){ if(!matrix[1]) matrix[1]=[]; matrix[1][c3]=ta0.value; }); })(c3,ta0);
       td0.appendChild(ta0); tr0.appendChild(td0);
     }
     tbody.appendChild(tr0);
@@ -961,9 +630,8 @@ function saveBackToIndexedDB(){
   getFile(currentFileRec.id).then(function(rec){
     rec.blob=blob; rec.type=mime; rec.size=blob.size;
     putFile(rec).then(function(){
-      currentFileRec = rec;
-      // After saving, update the editor meta to include the new size and progress
-      updateCurrentSheetProgress();
+      currentFileRec=rec;
+      if(els.editorMeta) els.editorMeta.textContent = rec.type + ' • ' + humanSize(rec.size);
       refreshFiles();
       alert('Saved.');
     }).catch(function(e){ alert('Save failed: '+e.message); });
@@ -1159,34 +827,6 @@ function closeModal(modal){
   modal.classList.remove('open'); modal.setAttribute('aria-hidden','true');
   document.documentElement.style.overflow='';
   if(modal===els.editorModal){
-    // When closing the editor, persist any unsaved changes back to IndexedDB.
-    // We first sync the in-memory matrix into the workbook sheet and then save the
-    // updated workbook back into the current file record.  This ensures that
-    // checkbox states and other edits are retained even if the user closes the
-    // editor without explicitly clicking Save.
-    try{
-      if(currentWB && currentMatrix && currentFileRec && currentSheetName){
-        syncMatrixIntoWorkbook();
-        // Save back quietly without prompting.  Use the same logic as
-        // saveBackToIndexedDB but suppress alerts to avoid spamming the user.
-        var extension=ext(currentFileRec.name);
-        var blob, mime;
-        if(extension==='csv' || currentFileRec.type==='text/csv'){
-          var csv=matrixToCSV(currentMatrix);
-          blob = new Blob([csv],{type:'text/csv'});
-          mime='text/csv';
-        } else {
-          var ab = XLSX.write(currentWB,{bookType:'xlsx', type:'array'});
-          blob = new Blob([ab],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
-          mime='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-        }
-        // Update the file record in IndexedDB
-        getFile(currentFileRec.id).then(function(rec){
-          rec.blob = blob; rec.type = mime; rec.size = blob.size;
-          return putFile(rec).then(function(){ currentFileRec = rec; refreshFiles(); updateCurrentSheetProgress(); });
-        }).catch(function(){ /* ignore errors */ });
-      }
-    }catch(e){ /* ignore errors */ }
     if(els.editorBody) els.editorBody.replaceChildren();
     if(els.sheetTabs) els.sheetTabs.replaceChildren();
     currentWB=null; currentMatrix=null; currentFileRec=null; currentSheetName=null; currentWS=null; currentAdapt=null;
