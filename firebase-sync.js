@@ -1,21 +1,4 @@
-// firebase-sync.js — TOP-RIGHT floating Sync button (no toolbar integration)
-//
-// Drop-in instructions:
-// 1) Replace your existing `firebase-sync.js` with this file.
-// 2) Keep your existing script tags, e.g.:
-//      <script src="firebase-sync.js"></script>
-//      <script src="sync-hook.js"></script>
-//      <script> FirebaseSync.init(); </script>
-// 3) The button appears at the TOP‑RIGHT, above everything, not blocked by OS taskbars.
-//
-// Features:
-// • Robust mount: always-visible top-right floating button (high z-index).
-// • Status-aware label: “Sign In / Sync” → “Cloud: Signed In” when authenticated.
-// • Google sign-in fallback: popup → redirect; handles redirect result on init.
-// • Email link sign-in supported; Anonymous sign-in for quick tests (no cross-device sync).
-// • Same modal as before: Email link, Google, Anon, Sign Out, List Files.
-//
-// Config baked-in for your project:
+// firebase-sync.js — TOP-RIGHT floating Sync button with DIAGNOSTICS
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyAyusvJlBlsciBmm0LdZy8hPrR0DAOFQD8",
   authDomain: "gamesheets-62e13.firebaseapp.com",
@@ -28,6 +11,10 @@ const FIREBASE_CONFIG = {
 const FirebaseSync = (function(){
   let app, auth, storage, db, user;
   let btn; // floating button
+
+  function log(...args){ try{ console.log('[FirebaseSync]', ...args); }catch(_e){} }
+  function warn(...args){ try{ console.warn('[FirebaseSync]', ...args); }catch(_e){} }
+  function err(...args){ try{ console.error('[FirebaseSync]', ...args); }catch(_e){} }
 
   async function loadFirebase(){
     if(window.firebase && window.firebase.app) return;
@@ -53,18 +40,21 @@ const FirebaseSync = (function(){
     auth = firebase.auth();
     storage = firebase.storage();
     db = firebase.firestore();
+    log('Initialized with project:', config.projectId);
 
-    // Complete email link sign-in if returning via link
     if(auth.isSignInWithEmailLink(window.location.href)){
       const savedEmail = window.localStorage.getItem('gs_email_for_signin');
       const email = savedEmail || window.prompt('Confirm your email to complete sign-in:');
+      log('Completing email-link sign-in for', email);
       await auth.signInWithEmailLink(email, window.location.href);
       window.localStorage.removeItem('gs_email_for_signin');
       history.replaceState({}, document.title, window.location.pathname);
     }
 
-    // Handle Google redirect fallback result
-    try{ await auth.getRedirectResult(); }catch(e){ console.warn('[FirebaseSync] redirect result:', e.message); }
+    try{
+      const result = await auth.getRedirectResult();
+      if(result && result.user){ log('Google redirect complete for', result.user.email || result.user.uid); }
+    }catch(e){ warn('redirect result error:', e.message); }
 
     user = auth.currentUser;
     auth.onAuthStateChanged(u => { user = u || null; updateButtonLabel(); });
@@ -73,7 +63,6 @@ const FirebaseSync = (function(){
     return true;
   }
 
-  // ---- Auth helpers ----
   async function signInWithEmail(email){
     await auth.sendSignInLinkToEmail(email, {
       url: window.location.origin + window.location.pathname,
@@ -87,10 +76,13 @@ const FirebaseSync = (function(){
     try{
       const provider = new firebase.auth.GoogleAuthProvider();
       await auth.signInWithPopup(provider);
+      log('Google popup sign-in success');
     }catch(e){
       const code = (e && e.code) || '';
+      warn('Google popup failed:', code, e && e.message);
       if(code === 'auth/popup-blocked' || code === 'auth/popup-closed-by-user'){
         const provider = new firebase.auth.GoogleAuthProvider();
+        log('Falling back to Google redirect sign-in');
         await auth.signInWithRedirect(provider);
         return;
       }
@@ -102,12 +94,14 @@ const FirebaseSync = (function(){
     }
   }
 
-  async function signInAnonymously(){ await auth.signInAnonymously(); }
-  async function signOut(){ await auth.signOut(); }
+  async function signInAnonymously(){ await auth.signInAnonymously(); log('Signed in anonymously'); }
+  async function signOut(){ await auth.signOut(); log('Signed out'); }
 
-  function requireUser(){ if(!user) throw new Error('Not signed in.'); return user; }
+  function requireUser(){
+    if(!user) throw new Error('Not signed in.');
+    return user;
+  }
 
-  // ---- Cloud ops ----
   async function uploadWorkbook(fileId, name, arrayBuffer, meta = {}){
     const u = requireUser();
     const ref = storage.ref().child(`workbooks/${u.uid}/${fileId}.xlsx`);
@@ -133,38 +127,35 @@ const FirebaseSync = (function(){
     return col.docs.map(d => ({ id: d.id, ...d.data() }));
   }
 
-  // ---- UI: Floating button + modal ----
   function mountTopRightButton(){
     if(btn && document.contains(btn)) return;
     btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'btn btn-sync-floating';
     btn.setAttribute('aria-label', 'Cloud Sync');
-    btn.style.position = 'fixed';
-    btn.style.top = '12px';
-    btn.style.right = '12px';
-    btn.style.zIndex = '2147483647'; // very high
-    btn.style.padding = '8px 10px';
-    btn.style.borderRadius = '10px';
-    btn.style.boxShadow = '0 6px 18px rgba(0,0,0,.18)';
-    btn.style.backdropFilter = 'blur(4px)';
-    btn.style.background = 'linear-gradient( to bottom right, rgba(255,255,255,.85), rgba(245,245,245,.85) )';
-    btn.style.border = '1px solid rgba(0,0,0,.08)';
-    btn.style.cursor = 'pointer';
+    Object.assign(btn.style, {
+      position: 'fixed',
+      top: '12px',
+      right: '12px',
+      zIndex: '2147483647',
+      padding: '8px 10px',
+      borderRadius: '10px',
+      boxShadow: '0 6px 18px rgba(0,0,0,.18)',
+      backdropFilter: 'blur(4px)',
+      background: 'linear-gradient( to bottom right, rgba(255,255,255,.85), rgba(245,245,245,.85) )',
+      border: '1px solid rgba(0,0,0,.08)',
+      cursor: 'pointer'
+    });
     btn.onclick = openSyncModal;
     document.body.appendChild(btn);
     updateButtonLabel();
-
-    // Re-assert position on resize/orientation (some mobile UIs adjust viewport)
-    window.addEventListener('orientationchange', ()=> { btn.style.top='12px'; btn.style.right='12px'; }, {passive:true});
-    window.addEventListener('resize', ()=> { btn.style.top='12px'; btn.style.right='12px'; }, {passive:true});
   }
 
   function updateButtonLabel(){
     if(!btn) return;
     if(user){
       btn.textContent = 'Cloud: Signed In';
-      btn.title = 'Open Cloud Sync';
+      btn.title = user.email ? `Signed in as ${user.email}` : 'Signed in';
     }else{
       btn.textContent = 'Sign In / Sync';
       btn.title = 'Sign in to sync across devices';
@@ -172,7 +163,7 @@ const FirebaseSync = (function(){
   }
 
   function showError(msg){
-    console.error('[FirebaseSync]', msg);
+    err(msg);
     const out = document.querySelector('.sync-modal #gs_out');
     if(out){ out.textContent = String(msg); }
   }
@@ -180,50 +171,90 @@ const FirebaseSync = (function(){
   function openSyncModal(){
     const div = document.createElement('div');
     div.className = 'sync-modal';
+    const emailTxt = user && user.email ? user.email : '(not signed in)';
+    const uidTxt = user && user.uid ? user.uid : '—';
     div.innerHTML = `
-      <div class="box" style="position:fixed; left:50%; top:20%; transform:translateX(-50%); background:#fff; padding:14px; border-radius:10px; box-shadow: 0 10px 30px rgba(0,0,0,.12); min-width: 320px; z-index:2147483646;">
+      <div class="box" style="position:fixed; left:50%; top:18%; transform:translateX(-50%); background:#fff; padding:14px; border-radius:10px; box-shadow: 0 10px 30px rgba(0,0,0,.12); min-width: 340px; z-index:2147483646;">
         <div style="font-weight:700; margin-bottom:10px;">Cloud Sync</div>
+        <div style="font-size:12px; margin-bottom:10px; color:#444;">
+          <div><b>Status:</b> ${user ? 'Signed In' : 'Signed Out'}</div>
+          <div><b>Email:</b> ${emailTxt}</div>
+          <div><b>UID:</b> ${uidTxt}</div>
+        </div>
         <div style="display:flex; gap:6px; margin-bottom:8px;">
           <input id="gs_email" type="email" placeholder="email for sign-in" style="flex:1; padding:6px;">
           <button id="gs_send" class="btn">Email Link</button>
         </div>
-        <div style="display:flex; gap:6px; margin-bottom:8px;">
+        <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
           <button id="gs_google" class="btn">Sign in with Google</button>
           <button id="gs_anon" class="btn">Anon</button>
           <button id="gs_signout" class="btn">Sign Out</button>
-        </div>
-        <div style="display:flex; gap:6px; margin-bottom:8px;">
           <button id="gs_list" class="btn">List Files</button>
+          <button id="gs_testfs" class="btn">Test Firestore</button>
+          <button id="gs_testst" class="btn">Test Storage</button>
           <button id="gs_close" class="btn">Close</button>
         </div>
-        <div id="gs_out" style="margin-top:8px; font-size:12px; max-height:40vh; overflow:auto;"></div>
+        <div id="gs_out" style="margin-top:8px; font-size:12px; max-height:40vh; overflow:auto; white-space:pre-wrap;"></div>
       </div>`;
     document.body.appendChild(div);
     const out = div.querySelector('#gs_out');
+
+    function setOut(t){ out.textContent = t; }
+
     div.querySelector('#gs_send').onclick = async ()=>{
       const email = div.querySelector('#gs_email').value.trim();
       if(!email){ alert('enter email'); return; }
-      try{ await signInWithEmail(email); out.textContent = 'Email link sent.'; }
+      try{ await signInWithEmail(email); setOut('Email link sent. Check your inbox.'); }
       catch(e){ showError(e.message); }
     };
     div.querySelector('#gs_google').onclick = async ()=>{
-      try{ await signInWithGoogle(); updateButtonLabel(); out.textContent = 'Google sign-in complete (or redirecting).'; }
+      try{ await signInWithGoogle(); updateButtonLabel(); setOut('Google sign-in complete (or redirecting).'); }
       catch(e){ showError(e.message); }
     };
     div.querySelector('#gs_anon').onclick = async ()=>{
-      await signInAnonymously(); updateButtonLabel(); out.textContent = 'Signed in anonymously (no cross-device sync).';
+      await signInAnonymously(); updateButtonLabel(); setOut('Signed in anonymously (no cross-device sync).');
     };
     div.querySelector('#gs_signout').onclick = async ()=>{
-      await signOut(); updateButtonLabel(); out.textContent = 'Signed out';
+      await signOut(); updateButtonLabel(); setOut('Signed out.');
     };
     div.querySelector('#gs_list').onclick = async ()=>{
-      try{ const files = await listFiles(); out.textContent = JSON.stringify(files,null,2); }
-      catch(e){ showError(e.message); }
+      try{
+        if(!user){ setOut('Not signed in. Sign in first, then try again.'); return; }
+        setOut('Listing...');
+        const files = await listFiles();
+        setOut(JSON.stringify(files,null,2) || '(empty)');
+      }catch(e){
+        showError('List Files error: ' + e.message);
+      }
+    };
+    div.querySelector('#gs_testfs').onclick = async ()=>{
+      try{
+        if(!user){ setOut('Not signed in. Sign in first.'); return; }
+        setOut('Testing Firestore write/read...');
+        const ref = db.collection('users').doc(user.uid).collection('files').doc('__diagnostic__');
+        await ref.set({ name:'diag', updated_at: Date.now(), meta: { ping:true } }, { merge:true });
+        const snap = await ref.get();
+        setOut('Firestore OK. Document exists: ' + snap.exists);
+      }catch(e){
+        showError('Firestore test failed: ' + e.message);
+      }
+    };
+    div.querySelector('#gs_testst').onclick = async ()=>{
+      try{
+        if(!user){ setOut('Not signed in. Sign in first.'); return; }
+        setOut('Testing Storage upload...');
+        const testBytes = new TextEncoder().encode('diagnostic blob ' + Date.now());
+        const ref = storage.ref().child(`workbooks/${user.uid}/__diagnostic__.txt`);
+        await ref.put(new Blob([testBytes], { type: 'text/plain' }));
+        const url = await ref.getDownloadURL();
+        setOut('Storage OK. Download URL: ' + url);
+      }catch(e){
+        showError('Storage test failed: ' + e.message);
+      }
     };
     div.querySelector('#gs_close').onclick = ()=> div.remove();
   }
 
-  // Public API (in case you need to remount programmatically later)
   return { init, uploadWorkbook, downloadWorkbook, listFiles, openSyncModal };
 })();
 
