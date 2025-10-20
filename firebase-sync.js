@@ -1,4 +1,4 @@
-// firebase-sync.js — Cross-device, bucket-pinned, with Storage browser + one-click Restore
+// firebase-sync.js — Cross-device sync with forced-online Firestore + robust migrate
 const FIREBASE_CONFIG = {
   apiKey: "AIzaSyAyusvJlBlsciBmm0LdZy8hPrR0DAOFQD8",
   authDomain: "gamesheets-62e13.firebaseapp.com",
@@ -11,6 +11,8 @@ const GS_BUCKET = "gs://gamesheets-62e13.firebasestorage.app";
 const FirebaseSync = (function(){
   let app, auth, storage, db, user;
   let btn;
+
+  function sleep(ms){ return new Promise(r=>setTimeout(r, ms)); }
 
   async function loadFirebase(){
     if(window.firebase && window.firebase.app) return;
@@ -28,12 +30,24 @@ const FirebaseSync = (function(){
     }
   }
 
+  async function ensureOnline(){
+    try{
+      if(firebase && firebase.firestore && firebase.firestore().enableNetwork){
+        await firebase.firestore().enableNetwork();
+      }else if(db && db.enableNetwork){
+        await db.enableNetwork();
+      }
+    }catch(e){}
+  }
+
   async function init(config = FIREBASE_CONFIG){
     await loadFirebase();
     app = firebase.initializeApp(config);
     auth = firebase.auth();
     storage = firebase.storage();
     db = firebase.firestore();
+
+    await ensureOnline();
 
     if(auth.isSignInWithEmailLink(window.location.href)){
       const savedEmail = window.localStorage.getItem('gs_email_for_signin');
@@ -95,6 +109,7 @@ const FirebaseSync = (function(){
     const ref = fileRef(u.uid, fileId, 'xlsx');
     await ref.put(new Blob([arrayBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
     const docRef = db.collection('users').doc(u.uid).collection('files').doc(fileId);
+    await ensureOnline();
     await docRef.set({ name, updated_at: Date.now(), meta }, { merge: true });
     return true;
   }
@@ -105,12 +120,14 @@ const FirebaseSync = (function(){
     const resp = await fetch(url);
     const ab = await resp.arrayBuffer();
     const docRef = db.collection('users').doc(u.uid).collection('files').doc(fileId);
+    await ensureOnline();
     const snap = await docRef.get();
     const meta = snap.exists ? snap.data() : {};
     return { arrayBuffer: ab, meta };
   }
   async function listFiles(){
     const u = requireUser();
+    await ensureOnline();
     const col = await db.collection('users').doc(u.uid).collection('files').orderBy('updated_at', 'desc').get();
     return col.docs.map(d => ({ id: d.id, ...d.data() }));
   }
@@ -130,33 +147,31 @@ const FirebaseSync = (function(){
   }
   async function migrateStorageToFirestore(){
     const u = requireUser();
-    const dir = dirRef(u.uid);
-    const res = await dir.listAll();
-    let count = 0;
-    for(const it of res.items){
-      const m = it.name.match(/^(.+)\.xlsx$/i);
-      if(!m) continue;
-      const fileId = m[1];
-      const docRef = db.collection('users').doc(u.uid).collection('files').doc(fileId);
-      const snap = await docRef.get();
-      if(!snap.exists){
-        await docRef.set({ name: it.name, updated_at: Date.now(), meta: { backfilled:true } }, { merge:true });
-        count++;
+    await ensureOnline();
+    let attempts = 0, maxAttempts = 4;
+    while(true){
+      try{
+        const dir = dirRef(u.uid);
+        const res = await dir.listAll();
+        let count = 0;
+        for(const it of res.items){
+          const m = it.name.match(/^(.+)\.xlsx$/i);
+          if(!m) continue;
+          const fileId = m[1];
+          const docRef = db.collection('users').doc(u.uid).collection('files').doc(fileId);
+          const snap = await docRef.get();
+          if(!snap.exists){
+            await docRef.set({ name: it.name, updated_at: Date.now(), meta: { backfilled:true } }, { merge: true });
+            count++;
+          }
+        }
+        return count;
+      }catch(e){
+        attempts++;
+        if(attempts >= maxAttempts) throw e;
+        await ensureOnline();
+        await sleep(400 * attempts);
       }
-    }
-    return count;
-  }
-  async function restoreFromStorage(fileId){
-    const u = requireUser();
-    const ref = fileRef(u.uid, fileId, 'xlsx');
-    const url = await ref.getDownloadURL();
-    const resp = await fetch(url);
-    const ab = await resp.arrayBuffer();
-    if(!window.GSCloud){ window.GSCloud = {}; }
-    if(typeof window.GSCloud.onDownloaded === 'function'){
-      window.GSCloud.onDownloaded(ab, { id:fileId, source:'storage' });
-    }else{
-      alert('Downloaded ' + fileId + '.xlsx (' + ab.byteLength + ' bytes). Implement GSCloud.onDownloaded() to load it into the editor.');
     }
   }
 
@@ -222,29 +237,6 @@ const FirebaseSync = (function(){
     const out = div.querySelector('#gs_out');
     const setOut = (t)=> out.textContent = t;
 
-    function renderStorageList(items){
-      if(!items || !items.length){ setOut('(no storage files for this UID)'); return; }
-      out.innerHTML = items.map(it => {
-        const safe = it.name.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-        return `<div style="display:flex; justify-content:space-between; gap:8px; align-items:center; padding:4px 0; border-bottom:1px solid #eee;">
-          <div>${safe} <span style="opacity:.6;font-size:11px;">${it.updated||''}</span></div>
-          <button data-fileid="${(it.id||'').replace(/"/g,'&quot;')}" class="btn btn-sm">Open</button>
-        </div>`;
-      }).join('');
-      out.querySelectorAll('button[data-fileid]').forEach(b => {
-        b.onclick = async () => {
-          const fid = b.getAttribute('data-fileid');
-          try{
-            setOut('Downloading ' + fid + ' …');
-            await restoreFromStorage(fid);
-            setOut('Downloaded ' + fid + '.xlsx — handed to window.GSCloud.onDownloaded');
-          }catch(e){
-            setOut('Download failed: ' + e.message);
-          }
-        };
-      });
-    }
-
     div.querySelector('#gs_send').onclick = async ()=>{
       const email = div.querySelector('#gs_email').value.trim();
       if(!email){ alert('enter email'); return; }
@@ -260,13 +252,30 @@ const FirebaseSync = (function(){
       try{ await signOut(); updateButtonLabel(); setOut('Signed out.'); }catch(e){ setOut(e.message); }
     };
     div.querySelector('#gs_listfs').onclick = async ()=>{
-      try{ const files = await listFiles(); setOut(JSON.stringify(files,null,2) || '(empty)'); }catch(e){ setOut('List Files error: ' + e.message); }
+      try{
+        const files = await listFiles();
+        setOut(JSON.stringify(files,null,2) || '(empty)');
+        if(!files || files.length === 0){
+          setOut('(No Firestore metadata yet for this UID.)\nClick "List Storage (debug)" to verify objects, then "Migrate Storage → Firestore".');
+        }
+      }catch(e){ setOut('List Files error: ' + e.message); }
     };
     div.querySelector('#gs_listst').onclick = async ()=>{
-      try{ const items = await listStorage(); renderStorageList(items); }catch(e){ setOut('List Storage error: ' + e.message); }
+      try{
+        const items = await listStorage();
+        if(!items || items.length === 0){
+          setOut('(No Storage objects under this UID path). Make sure you are signed into the same Google account as the device that uploaded.');
+        }else{
+          setOut(items.map(it => `• ${it.name}  (${it.updated||''})`).join('\n'));
+        }
+      }catch(e){ setOut('List Storage error: ' + e.message); }
     };
     div.querySelector('#gs_migrate').onclick = async ()=>{
-      try{ const n = await migrateStorageToFirestore(); setOut('Backfilled ' + n + ' metadata docs.'); }catch(e){ setOut('Migrate error: ' + e.message); }
+      try{
+        setOut('Backfilling Firestore metadata…');
+        const n = await migrateStorageToFirestore();
+        setOut('Backfilled ' + n + ' metadata docs. Now click "List Files".');
+      }catch(e){ setOut('Migrate error: ' + e.message + '\nHint: if you still see "offline", check ad-block / network restrictions, or hard-reload so Firestore reinitializes online.'); }
     };
     div.querySelector('#gs_refresh').onclick = ()=>{ setOut(''); };
     div.querySelector('#gs_close').onclick = ()=> div.remove();
