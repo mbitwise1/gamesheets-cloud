@@ -147,5 +147,13 @@
   </footer>
 
   <script src="app.js"></script>
+
+  <!-- Cloud sync (Firebase) -->
+  <script src="firebase-sync.js"></script>
+  <script src="sync-hook.js"></script>
+  <script>
+    FirebaseSync.init().then(()=> FirebaseSync.showSettingsButton());
+  </script>
+
 </body>
 </html>
