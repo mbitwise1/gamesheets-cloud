@@ -1295,3 +1295,345 @@ async function init(){
 }
 
 document.addEventListener('DOMContentLoaded', init);
+
+
+
+/* === Gamesheets Sorting Upgrade (v1.1) === */
+(function(){
+  if (window.__gsSortingInstalled) return;
+  window.__gsSortingInstalled = true;
+
+  window._gsSort = window._gsSort || {};
+
+  function _inferSortType(colStats, colIdx, headerText){
+    if(colStats && colStats[colIdx] && colStats[colIdx].booleanLikeRatio >= 0.7) return 'completed';
+    if(headerText && /done|complete|completed|status|check(ed)?/i.test(headerText)) return 'completed';
+    if(colStats && colStats[colIdx] && colStats[colIdx].numericRatio >= 0.7) return 'numeric';
+    return 'alpha';
+  }
+  function _normalizeBooleanLike(v){
+    if (v === true || v === false) return v ? 1 : 0;
+    if (v == null) return -1;
+    var s = (''+v).trim().toLowerCase();
+    if (s === '' ) return -1;
+    if (/^(true|yes|y|x|✓|✔|done|completed|1)$/i.test(s)) return 1;
+    if (/^(false|no|n|0)$/i.test(s)) return 0;
+    return -1;
+  }
+  function _coerceNumeric(v){
+    if (typeof v === 'number') return v;
+    if (v == null) return NaN;
+    var s = (''+v).replace(/[$,]/g,'').trim();
+    if (s === '') return NaN;
+    var num = parseFloat(s);
+    return isFinite(num) ? num : NaN;
+  }
+  function _coerceAlpha(v){
+    if (v == null) return '';
+    return (''+v).toLowerCase();
+  }
+  function _stableSort(array, cmp){
+    return array
+      .map(function(v, idx){ return {v:v, i:idx}; })
+      .sort(function(a,b){ var c = cmp(a.v, b.v); return c || (a.i - b.i); })
+      .map(function(o){ return o.v; });
+  }
+  function _computeColStatsForSort(matrix){
+    var cols = 0;
+    for(var r=0; r<matrix.length; r++){ cols = Math.max(cols, (matrix[r]||[]).length); }
+    var stats = [];
+    for(var c=0; c<cols; c++){
+      var total=0, bools=0, nums=0;
+      for(var r=1; r<matrix.length; r++){
+        var row = matrix[r]||[];
+        var v = (row[c] != null) ? row[c] : '';
+        if((''+v).trim() === '') continue;
+        total++;
+        if(_normalizeBooleanLike(v) !== -1) bools++;
+        if(!isNaN(_coerceNumeric(v))) nums++;
+      }
+      var ratio = total>0 ? (bools/total) : 0;
+      var nratio = total>0 ? (nums/total) : 0;
+      stats[c] = { booleanLikeRatio: ratio, numericRatio: nratio };
+    }
+    return stats;
+  }
+  function _findSectionHeaderRows(matrix){
+    var rows = [];
+    for(var r=1; r<matrix.length; r++){
+      try { if (isSectionHeaderRow(matrix, r, null, null)) rows.push(r); }
+      catch(e){
+        var nonEmpty = 0;
+        var row = matrix[r]||[];
+        for(var c=0;c<row.length;c++){ if(row[c] !== '' && row[c] != null) nonEmpty++; }
+        if (nonEmpty <= 2) rows.push(r);
+      }
+    }
+    return rows;
+  }
+  function _sortRowsSlice(matrix, startRow, endRow, colIdx, type, dir){
+    var body = matrix.slice(startRow, endRow);
+    var cmp;
+    if(type === 'completed'){
+      cmp = function(A,B){
+        var a = _normalizeBooleanLike((A||[])[colIdx]);
+        var b = _normalizeBooleanLike((B||[])[colIdx]);
+        if(a === b) return 0;
+        return (a < b ? -1 : 1);
+      };
+    } else if(type === 'numeric'){
+      cmp = function(A,B){
+        var a = _coerceNumeric((A||[])[colIdx]);
+        var b = _coerceNumeric((B||[])[colIdx]);
+        if(isNaN(a) && isNaN(b)) return 0;
+        if(isNaN(a)) return 1;
+        if(isNaN(b)) return -1;
+        return a - b;
+      };
+    } else { // alpha
+      cmp = function(A,B){
+        var a = _coerceAlpha((A||[])[colIdx]);
+        var b = _coerceAlpha((B||[])[colIdx]);
+        if(a === b) return 0;
+        return a < b ? -1 : 1;
+      };
+    }
+    var sorted = _stableSort(body, cmp);
+    if(dir === 'desc') sorted.reverse();
+    for(var i=0; i<sorted.length; i++){
+      matrix[startRow + i] = sorted[i];
+    }
+  }
+  function sortMatrixInPlace(matrix, options){
+    options = options || {};
+    var colIdx = options.col|0;
+    var dir = options.dir === 'desc' ? 'desc' : 'asc';
+    var scope = options.scope === 'sheet' ? 'sheet' : 'sections';
+    var headerText = (matrix[0] && matrix[0][colIdx]) ? (''+matrix[0][colIdx]) : '';
+    var stats = _computeColStatsForSort(matrix);
+    var type = (options.type && /^(alpha|numeric|completed)$/.test(options.type)) ? options.type : _inferSortType(stats, colIdx, headerText);
+
+    if(scope === 'sheet'){
+      _sortRowsSlice(matrix, 1, matrix.length, colIdx, type, dir);
+    } else {
+      var secIdxs = _findSectionHeaderRows(matrix);
+      if(secIdxs.length === 0){
+        _sortRowsSlice(matrix, 1, matrix.length, colIdx, type, dir);
+      } else {
+        var bounds = [];
+        var prev = 1;
+        for(var i=0;i<secIdxs.length;i++){
+          var sec = secIdxs[i];
+          if(sec > prev) { bounds.push([prev, sec]); }
+          prev = sec + 1;
+        }
+        if(prev < matrix.length) bounds.push([prev, matrix.length]);
+        bounds.forEach(function(b){ _sortRowsSlice(matrix, b[0], b[1], colIdx, type, dir); });
+      }
+    }
+    return { col: colIdx, dir: dir, type: type, scope: scope };
+  }
+
+  // decorate renderMatrix safely
+  if (typeof renderMatrix === 'function'){
+    var _origRenderMatrix = renderMatrix;
+    renderMatrix = function(matrix, adapt){
+      var tbl = _origRenderMatrix(matrix, adapt);
+      try {
+        // remember current for quick rerender
+        window._activeMatrix = matrix;
+        window._activeAdapt = adapt;
+
+        var thead = tbl && tbl.querySelector ? tbl.querySelector('thead') : null;
+        if (!thead) return tbl;
+
+        // apply indicator
+        var currentSheetKey = (window._currentSheetKey || 'default');
+        var s = window._gsSort[currentSheetKey];
+        var ths = thead.querySelectorAll('th');
+        ths.forEach(function(th, i){
+          th.classList.remove('sorted-asc'); th.classList.remove('sorted-desc');
+          if(s && i === s.col){ th.classList.add(s.dir === 'desc' ? 'sorted-desc' : 'sorted-asc'); }
+          th.style.cursor = 'pointer';
+          th.onclick = function(){
+            var state = (window._gsSort[currentSheetKey] && window._gsSort[currentSheetKey].col === i) ? window._gsSort[currentSheetKey] : null;
+            var nextDir = state ? (state.dir === 'asc' ? 'desc' : (state.dir === 'desc' ? null : 'asc')) : 'asc';
+            if(!nextDir){
+              delete window._gsSort[currentSheetKey];
+              if(typeof window._rerenderCurrentSheet === 'function'){ window._rerenderCurrentSheet(); }
+              return;
+            }
+            var result = sortMatrixInPlace(matrix, { col: i, dir: nextDir, scope: 'sections' });
+            window._gsSort[currentSheetKey] = result;
+            if(typeof window._rerenderCurrentSheet === 'function'){ window._rerenderCurrentSheet(); }
+          };
+        });
+      } catch(e){ console.warn('Sorting adornment failed:', e); }
+      return tbl;
+    };
+  }
+
+  if (typeof window._rerenderCurrentSheet !== 'function'){
+    window._rerenderCurrentSheet = function(){
+      try {
+        var host = document.getElementById('tableHost');
+        if(!host) return;
+        host.innerHTML = '';
+        if (window._activeMatrix && typeof renderMatrix === 'function'){
+          var tbl = renderMatrix(window._activeMatrix, window._activeAdapt || null);
+          host.appendChild(tbl);
+        }
+      } catch(e){ console.warn('rerender failed', e); }
+    };
+  }
+})();
+
+
+/* =========================================================
+   GameSheets — Persistent Storage Add-on (inline)
+   - IndexedDB helper (StorageGS)
+   - Service worker registration
+   - Hooks into saveBackToIndexedDB() and editor close
+   ========================================================= */
+(function(){
+  // ---- StorageGS (inline version of storage.js) ----
+  const DB_NAME = 'gamesheets';
+  const DB_VERSION = 1;
+  const STORES = { files: 'files', settings: 'settings' };
+  let _db;
+  function openDB(){
+    return new Promise((resolve, reject)=>{
+      const req = indexedDB.open(DB_NAME, DB_VERSION);
+      req.onupgradeneeded = ()=>{
+        const db = req.result;
+        if(!db.objectStoreNames.contains(STORES.files)){
+          db.createObjectStore(STORES.files, { keyPath: 'id' });
+        }
+        if(!db.objectStoreNames.contains(STORES.settings)){
+          db.createObjectStore(STORES.settings, { keyPath: 'key' });
+        }
+      };
+      req.onsuccess = ()=> resolve(req.result);
+      req.onerror = ()=> reject(req.error);
+    });
+  }
+  async function db(){ if(_db) return _db; _db = await openDB(); return _db; }
+  async function put(storeName, val){
+    const d = await db();
+    return new Promise((resolve, reject)=>{
+      const tx = d.transaction(storeName, 'readwrite');
+      tx.oncomplete = ()=> resolve(true);
+      tx.onerror = ()=> reject(tx.error);
+      tx.objectStore(storeName).put(val);
+    });
+  }
+  async function get(storeName, key){
+    const d = await db();
+    return new Promise((resolve, reject)=>{
+      const tx = d.transaction(storeName, 'readonly');
+      tx.onerror = ()=> reject(tx.error);
+      const req = tx.objectStore(storeName).get(key);
+      req.onsuccess = ()=> resolve(req.result || null);
+      req.onerror = ()=> reject(req.error);
+    });
+  }
+  async function list(storeName){
+    const d = await db();
+    return new Promise((resolve, reject)=>{
+      const tx = d.transaction(storeName, 'readonly');
+      tx.onerror = ()=> reject(tx.error);
+      const out = [];
+      const req = tx.objectStore(storeName).openCursor();
+      req.onsuccess = (e)=>{
+        const cursor = e.target.result;
+        if(cursor){ out.push(cursor.value); cursor.continue(); }
+        else resolve(out);
+      };
+      req.onerror = ()=> reject(req.error);
+    });
+  }
+  async function del(storeName, key){
+    const d = await db();
+    return new Promise((resolve, reject)=>{
+      const tx = d.transaction(storeName, 'readwrite');
+      tx.onerror = ()=> reject(tx.error);
+      tx.oncomplete = ()=> resolve(true);
+      tx.objectStore(storeName).delete(key);
+    });
+  }
+  window.StorageGS = {
+    async saveFile(rec){
+      if(!(rec && rec.id)) throw new Error('saveFile requires rec.id');
+      const to = Object.assign({}, rec);
+      if(to.data && to.data.buffer){ to.data = to.data.buffer.slice(0); }
+      return put(STORES.files, to);
+    },
+    async loadFile(id){ return get(STORES.files, id); },
+    async listFiles(){ return list(STORES.files); },
+    async removeFile(id){ return del(STORES.files, id); },
+    async setSetting(key, value){ return put(STORES.settings, { key, value }); },
+    async getSetting(key){ const r = await get(STORES.settings, key); return r ? r.value : null; },
+    async listSettings(){ return list(STORES.settings); },
+    async autosaveWorkbook({ id, name, type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', arrayBuffer, meta }){
+      const rec = { id, name, type, size: arrayBuffer ? arrayBuffer.byteLength : 0, modified: Date.now(), data: arrayBuffer, meta: meta || {} };
+      await window.StorageGS.saveFile(rec);
+      await window.StorageGS.setSetting('last_open', { id, when: Date.now() });
+      return true;
+    }
+  };
+
+  // ---- Service worker registration (safe no-op if missing) ----
+  try{
+    if('serviceWorker' in navigator){
+      window.addEventListener('load', function(){
+        navigator.serviceWorker.register('./sw.js').catch(function(){});
+      });
+    }
+  }catch(_e){}
+
+  // ---- Hook saveBackToIndexedDB to also autosave via StorageGS ----
+  try{
+    if(typeof saveBackToIndexedDB === 'function'){
+      const _origSave = saveBackToIndexedDB;
+      window.saveBackToIndexedDB = function(){
+        // call original first
+        try { _origSave(); } catch(e) { console.error(e); }
+        try{
+          if(window.currentWB && window.currentFileRec && typeof XLSX !== 'undefined'){
+            // Ensure workbook is up-to-date
+            if(typeof syncMatrixIntoWorkbook === 'function') syncMatrixIntoWorkbook();
+            const ab = XLSX.write(window.currentWB, { bookType:'xlsx', type:'array' });
+            window.StorageGS.autosaveWorkbook({
+              id: window.currentFileRec.id,
+              name: window.currentFileRec.name,
+              arrayBuffer: ab,
+              meta: { sheet: window.currentSheetName || '', ts: Date.now() }
+            });
+          }
+        }catch(e){ console.warn('[StorageGS] autosave failed:', e.message); }
+      };
+    }
+  }catch(_e){}
+
+  // ---- Persist on sheet switch as well (best-effort) ----
+  try{
+    if(typeof syncMatrixIntoWorkbook === 'function'){
+      const _sync = syncMatrixIntoWorkbook;
+      window.syncMatrixIntoWorkbook = function(){
+        const r = _sync.apply(this, arguments);
+        try{
+          if(window.currentWB && window.currentFileRec && typeof XLSX !== 'undefined'){
+            const ab = XLSX.write(window.currentWB, { bookType:'xlsx', type:'array' });
+            window.StorageGS.autosaveWorkbook({
+              id: window.currentFileRec.id,
+              name: window.currentFileRec.name,
+              arrayBuffer: ab,
+              meta: { sheet: window.currentSheetName || '', ts: Date.now() }
+            });
+          }
+        }catch(e){ /* silent */ }
+        return r;
+      };
+    }
+  }catch(_e){}
+})();
