@@ -1,4 +1,6 @@
+@ -1,159 +1,15 @@
 <!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
@@ -7,6 +9,9 @@
   <title>Game Sheets — Personal Tracker</title>
   <link rel="stylesheet" href="style.css" />
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <meta charset="utf-8">
+  <title>GameSheets — Cloud Sync</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body>
   <header>
@@ -154,6 +159,10 @@
   <script>
     FirebaseSync.init().then(()=> FirebaseSync.showSettingsButton());
   </script>
+  <!-- Your existing markup goes here -->
 
+  <!-- Important: include these at the very end -->
+  <script src="firebase-sync.js?v=9"></script>
+  <script src="progress-sync.js?v=1"></script>
 </body>
 </html>
